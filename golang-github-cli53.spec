@@ -19,9 +19,6 @@
 # Build with debug info rpm
 %global with_debug 0
 # Run tests in check section
-# as long as there is circular dependency between 
-# golang-github-stretchr-testify and golang-github-stretchr-objx
-# there can not be test
 %global with_check 0
 # Generate unit-test rpm
 %global with_unit_test 1
@@ -44,7 +41,8 @@
 
 Name:           golang-%{provider}-%{project}-%{repo}
 Version:        0.8.7
-Release:        0.%{shortcommit}%{?dist}
+#Release:        0.%{shortcommit}%{?dist}
+Release:        0.2%{?dist}
 Summary:        Tools for testifying that your code will behave as you intend
 License:        MIT
 URL:            https://%{provider_prefix}
@@ -65,13 +63,6 @@ your code will behave as you intend.
 %package devel
 Summary:       %{summary}
 BuildArch:     noarch
-
-%if 0%{?with_check}
-# cyclic deps
-BuildRequires: golang(github.com/stretchr/objx)
-%endif
-
-Requires:      golang(github.com/stretchr/objx)
 
 Provides:      golang(%{import_path}) = %{version}-%{release}
 Provides:      golang(%{import_path}/assert) = %{version}-%{release}
@@ -110,11 +101,26 @@ providing packages with %{import_path} prefix.
 %prep
 %setup -q -n %{repo}-%{commit}
 
-#mv LICENCE.txt LICENSE.txt
-
 %build
+# Copied from golang-googlecode-tools.spec
+mkdir _build
+pushd _build
+
+mkdir -p src/$(dirname %{import_path})
+ln -s $(dirs +1 -l) src/%{import_path}
+export GOPATH=$(pwd):%{gopath}
+for cmd in \
+  cli53
+do
+  go build -v -a %{import_path}/cmd/$cmd
+  # skip building in order to test tests
+  #cp /usr/bin/true $cmd
+done
 
 %install
+install -d %{buildroot}%{_bindir}
+install -p -m 755 _build/cli53 %{buildroot}%{_bindir}
+
 # source codes for building projects
 %if 0%{?with_devel}
 install -d -p %{buildroot}/%{gopath}/src/%{import_path}/
@@ -159,6 +165,11 @@ export GOPATH=%{buildroot}/%{gopath}:$(pwd)/Godeps/_workspace:%{gopath}
 #define license tag if not already defined
 %{!?_licensedir:%global license %doc}
 
+%files
+%{_bindir}/*
+%license LICENSE
+%doc README.md
+
 %if 0%{?with_devel}
 %files devel -f devel.file-list
 %license LICENSE
@@ -174,6 +185,11 @@ export GOPATH=%{buildroot}/%{gopath}:$(pwd)/Godeps/_workspace:%{gopath}
 %endif
 
 %changelog
+* Mon Mar 20 2017 Nico Kadel-Garcia <nkadel@skyhook.com> - 0.8.7-0.2
+- Add hooks to publish actual cli53 binary
+
 * Wed Mar 15 2017 Nico Kadel-Garcia <nkadel@skyhook.com> - 0.8.7-0.1
 - Copy .spec file from golang-github-testify
 - Change LICENSE.txt references to LICENSE
+- Add manual insatllation of cmd/cli53 to _bindir and
+  activation of binary package
